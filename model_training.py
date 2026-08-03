@@ -225,12 +225,3 @@ y_pred = model.predict(X_test)
 
 {metric_lines}
 """
-
-if target_column not in df.columns:
-    raise ValueError(f"Target column '{target_column}' not found in dataset.")
-...
-if feature_df.shape[1] == 0:
-    raise ValueError(
-        "No numeric feature columns are available to train on. "
-        "Try encoding categorical columns first (see preprocessing options)."
-    )
