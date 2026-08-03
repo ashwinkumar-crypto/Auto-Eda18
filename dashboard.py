@@ -1,0 +1,192 @@
+"""
+dashboard.py
+------------
+Builds the interactive HTML dashboard (output/dashboard.html) combining
+dataset overview, statistics, missing values, duplicate analysis, chart
+images, automatic insights, and recommendations into one page using Jinja2.
+"""
+
+import os
+import base64
+from jinja2 import Template
+
+DASHBOARD_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ title }}</title>
+<style>
+  :root {
+    --navy: #1f2d3d;
+    --accent: #2e86de;
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --border: #e3e7ee;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--bg);
+    margin: 0;
+    color: #2c3e50;
+  }
+  header {
+    background: linear-gradient(135deg, var(--navy), #34495e);
+    color: #fff;
+    padding: 32px 40px;
+  }
+  header h1 { margin: 0; font-size: 28px; }
+  header p { margin: 6px 0 0; opacity: 0.85; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 30px 40px 60px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 30px; }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 20px; text-align: center;
+  }
+  .stat-card .value { font-size: 26px; font-weight: 700; color: var(--accent); }
+  .stat-card .label { font-size: 13px; color: #7f8c9a; margin-top: 4px; }
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px 28px; margin-bottom: 24px; }
+  section h2 { margin-top: 0; font-size: 19px; color: var(--navy); border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; }
+  th { background: #eef1f6; }
+  .chart-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .chart-card img { width: 100%; border-radius: 6px; border: 1px solid var(--border); }
+  .chart-card figcaption { text-align: center; font-size: 13px; margin-top: 6px; color: #7f8c9a; }
+  ul.insight-list li { margin-bottom: 8px; line-height: 1.5; }
+  .badge { display:inline-block; background:#e8f4fd; color:var(--accent); border-radius:5px;
+    padding:2px 8px; font-size:12px; margin-left:8px; }
+  footer { text-align:center; color:#95a5a6; font-size:12px; padding:20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AutoEDA Pro Dashboard</h1>
+  <p>{{ dataset_name }} &middot; Generated automatically</p>
+</header>
+<div class="container">
+
+  <div class="grid">
+    <div class="stat-card"><div class="value">{{ overview.rows }}</div><div class="label">Rows</div></div>
+    <div class="stat-card"><div class="value">{{ overview.columns }}</div><div class="label">Columns</div></div>
+    <div class="stat-card"><div class="value">{{ overview.memory_usage }}</div><div class="label">Memory Usage</div></div>
+    <div class="stat-card"><div class="value">{{ overview.missing_values_total }}</div><div class="label">Missing Values</div></div>
+  </div>
+
+  <section>
+    <h2>Dataset Overview</h2>
+    <table>
+      <tr><th>Metric</th><th>Value</th></tr>
+      <tr><td>Rows</td><td>{{ overview.rows }}</td></tr>
+      <tr><td>Columns</td><td>{{ overview.columns }}</td></tr>
+      <tr><td>Memory Usage</td><td>{{ overview.memory_usage }}</td></tr>
+      <tr><td>Missing Values (total)</td><td>{{ overview.missing_values_total }}</td></tr>
+      <tr><td>Duplicate Rows (original)</td><td>{{ overview.duplicate_rows }}</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Summary Statistics</h2>
+    {{ stats_table | safe }}
+  </section>
+
+  <section>
+    <h2>Missing Value Analysis</h2>
+    {% if missing_table %}
+      {{ missing_table | safe }}
+    {% else %}
+      <p>No missing values remain in the cleaned dataset.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Duplicate Analysis</h2>
+    <p>Duplicate rows found in original data: <strong>{{ duplicate_info.duplicate_count }}</strong>
+       ({{ duplicate_info.duplicate_percent }}%)</p>
+  </section>
+
+  <section>
+    <h2>Visualizations</h2>
+    <div class="chart-grid">
+      {% for chart in charts %}
+      <figure class="chart-card">
+        <img src="data:image/png;base64,{{ chart.data }}" alt="{{ chart.name }}">
+        <figcaption>{{ chart.name }}</figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section>
+    <h2>Automatic Insights</h2>
+    <ul class="insight-list">
+      {% for insight in insights %}<li>{{ insight }}</li>{% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h2>Recommendations</h2>
+    <ul class="insight-list">
+      {% for rec in recommendations %}<li>{{ rec }}</li>{% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h2>Final Conclusion</h2>
+    <p>{{ conclusion }}</p>
+  </section>
+
+</div>
+<footer>Generated by AutoEDA Pro</footer>
+</body>
+</html>
+"""
+
+
+def _encode_image(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+
+def build_dashboard(
+    dataset_name,
+    overview,
+    stats_df,
+    missing_df,
+    duplicate_info,
+    chart_paths,
+    insights,
+    recommendations,
+    conclusion,
+    output_path="output/dashboard.html",
+):
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    stats_table = stats_df.to_html(classes="table", border=0) if stats_df is not None and not stats_df.empty else "<p>No numeric columns available.</p>"
+    missing_table = missing_df.to_html(classes="table", border=0) if missing_df is not None and not missing_df.empty else None
+
+    charts = []
+    for path in chart_paths:
+        if path and os.path.exists(path):
+            charts.append({"name": os.path.splitext(os.path.basename(path))[0].title(), "data": _encode_image(path)})
+
+    template = Template(DASHBOARD_TEMPLATE)
+    html = template.render(
+        title=f"AutoEDA Pro - {dataset_name}",
+        dataset_name=dataset_name,
+        overview=overview,
+        stats_table=stats_table,
+        missing_table=missing_table,
+        duplicate_info=duplicate_info,
+        charts=charts,
+        insights=insights,
+        recommendations=recommendations,
+        conclusion=conclusion,
+    )
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    return output_path

@@ -1,0 +1,20 @@
+AUTOEDA PRO - AUTOMATIC INSIGHTS
+========================================
+
+INSIGHTS:
+1. Dataset contains 495 rows and 8 columns after cleaning.
+2. 61 missing values were detected and imputed (median for numeric columns, mode for categorical columns).
+3. 15 duplicate records were found and removed successfully.
+4. 5 outlier rows were detected via the IQR method and removed.
+5. Strong positive correlation found between CustomerID and SignupDate (r = 1.00).
+6. Numerical features have been normalized/standardized for ML readiness.
+7. Categorical columns (Gender, City, Purchased, SignupDate) were encoded numerically.
+8. Constant columns removed as they carry no information: Country.
+9. Dataset is clean and suitable for machine learning.
+
+RECOMMENDATIONS:
+1. Consider reviewing imputed values for columns with high missingness.
+2. Suitable for Regression models given multiple numeric features.
+3. Suitable for Classification models if a target label is defined.
+4. Additional feature engineering may improve performance.
+5. Dataset is relatively small; consider cross-validation to ensure robust model evaluation.
