@@ -136,8 +136,68 @@ class DataPreprocessor:
 
         self.df = df
         return self
+      #-----------Missing value handling---------------
 
+        def handle_missing_values(self):
+        df = self.df
+         self.log["missing_before"] = df.isnull().sum().to_dict()
+
+    for col in df.columns:
+        if df[col].isnull().sum() == 0:
+            continue
+
+        if is_numeric_column(df[col]):
+            fill_value = df[col].median()
+            df[col] = df[col].fillna(fill_value)
+            self.log["missing_filled"][col] = f"median ({fill_value:.4f})"
+        else:
+            mode_series = df[col].mode(dropna=True)
+            fill_value = mode_series.iloc[0] if not mode_series.empty else "Unknown"
+            df[col] = df[col].fillna(fill_value)
+            self.log["missing_filled"][col] = f"mode ({fill_value})"
+
+    self.df = df
+    return self
+  
+     # ------------------------------------------------------------------
+
+    #--------Error/Outlier Handling-------------------------------------
+        def remove_outliers(self, columns=None, factor=1.5):
+    df = self.df
+    numeric_cols = columns or df.select_dtypes(include=[np.number]).columns.tolist()
+    before = len(df)
+    mask = pd.Series(True, index=df.index)
+
+    for col in numeric_cols:
+        q1 = df[col].quantile(0.25)
+        q3 = df[col].quantile(0.75)
+        iqr = q3 - q1
+        lower = q1 - factor * iqr
+        upper = q3 + factor * iqr
+        mask &= df[col].between(lower, upper)
+
+    self.df = df[mask].reset_index(drop=True)
+    self.log["outliers_removed"] = before - len(self.df)
+    return self
     # ------------------------------------------------------------------
+
+    # -------------------Duplicates & bad columns:----------------------
+          def remove_duplicates(self):
+    before = len(self.df)
+    self.df = self.df.drop_duplicates().reset_index(drop=True)
+    self.log["duplicates_removed"] = before - len(self.df)
+    return self
+
+def clean_data(self):
+    df = self.df
+    constant_cols = [c for c in df.columns if df[c].nunique(dropna=False) <= 1]
+    if constant_cols:
+        df = df.drop(columns=constant_cols)
+        self.log["constant_columns_dropped"] = constant_cols
+    self.df = df
+    return self
+    # ------------------------------------------------------------------
+    
     def run_full_pipeline(self, encode=True, scale=True, encoding_method="label",
                            scaling_method="minmax", remove_outlier_rows=True):
         """Run the complete preprocessing pipeline in the documented order."""
