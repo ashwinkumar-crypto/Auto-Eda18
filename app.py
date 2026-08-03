@@ -275,3 +275,10 @@ if uploaded_file is not None:
 
 else:
     st.info("👆 Upload a dataset to get started. A sample file is available in the `input/` folder if you want to try the app first.")
+
+        try:
+    results = run_pipeline(...)
+    st.session_state["results"] = results
+    st.session_state["error"] = None
+        except Exception as e:
+    st.session_state["error"] = str(e)
