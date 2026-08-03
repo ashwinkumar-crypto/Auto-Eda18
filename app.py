@@ -272,6 +272,12 @@ if uploaded_file is not None:
 
                 st.markdown("**Code that ran**")
                 st.code(ml_result["generated_code"], language="python")
+                  try:
+                        results = run_pipeline(...)
+                        st.session_state["results"] = results
+                        st.session_state["error"] = None
+                except Exception as e:
+                        st.session_state["error"] = str(e)
 
 else:
     st.info("👆 Upload a dataset to get started. A sample file is available in the `input/` folder if you want to try the app first.")
