@@ -169,6 +169,11 @@ def train_and_evaluate(df, target_column, task_type="auto", algorithm=None, test
 
     result["generated_code"] = _generate_code(task_type, algorithm, target_column, feature_names, test_size)
 
+    # Keep the fitted estimator (and label encoder, if any) so callers can
+    # persist/download the trained model, e.g. via pickle/joblib.
+    result["model"] = model
+    result["label_encoder"] = label_encoder
+
     return result
 
 

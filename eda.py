@@ -124,7 +124,9 @@ class EDAAnalyzer:
         """Find the strongest positive and negative pairwise correlations,
         ignoring the diagonal and duplicate (i, j)/(j, i) pairs."""
         corr = corr_matrix.copy()
-        np.fill_diagonal(corr.values, np.nan)
+        corr_arr = corr.to_numpy(copy=True)
+        np.fill_diagonal(corr_arr, np.nan)
+        corr = pd.DataFrame(corr_arr, index=corr.index, columns=corr.columns)
 
         pairs = corr.unstack().dropna()
         # Remove duplicate mirrored pairs (A,B) vs (B,A)

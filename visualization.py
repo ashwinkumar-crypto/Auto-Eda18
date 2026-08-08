@@ -10,6 +10,7 @@ the charts/ directory:
   linechart.png (only if a datetime-like column is present)
 """
 
+import logging
 import os
 import numpy as np
 import pandas as pd
@@ -17,10 +18,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
+from scipy import stats
 
 from utils import is_datetime_like
 
 sns.set_theme(style="whitegrid")
+
+logger = logging.getLogger("autoeda.visualization")
 
 
 class ChartGenerator:
@@ -101,7 +105,9 @@ class ChartGenerator:
             return None
 
         corr = self.df[numeric_cols].corr().abs()
-        np.fill_diagonal(corr.values, 0)
+        corr_arr = corr.to_numpy(copy=True)
+        np.fill_diagonal(corr_arr, 0)
+        corr = pd.DataFrame(corr_arr, index=corr.index, columns=corr.columns)
         x_col, y_col = corr.stack().idxmax()
 
         fig, ax = plt.subplots(figsize=(7, 6))
@@ -196,8 +202,82 @@ class ChartGenerator:
         return self._save(fig, filename)
 
     # ------------------------------------------------------------------
-    def generate_all(self):
-        """Generate every applicable chart and return list of saved paths."""
+    def violinplot(self, filename="violinplot.png", max_cols=8):
+        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()[:max_cols]
+        if not numeric_cols:
+            return None
+
+        fig, ax = plt.subplots(figsize=(max(6, len(numeric_cols) * 1.2), 6))
+        sns.violinplot(data=self.df[numeric_cols], ax=ax, palette="Set3")
+        ax.set_title("Violin Plot - Distribution & Density")
+        ax.tick_params(axis="x", rotation=45)
+        fig.tight_layout()
+        return self._save(fig, filename)
+
+    # ------------------------------------------------------------------
+    def kdeplot(self, filename="kdeplot.png", max_cols=6):
+        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()[:max_cols]
+        if not numeric_cols:
+            return None
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        for col in numeric_cols:
+            sns.kdeplot(self.df[col].dropna(), ax=ax, label=col, fill=False)
+        ax.set_title("KDE Plot - Numeric Feature Density")
+        ax.legend(fontsize=8)
+        fig.tight_layout()
+        return self._save(fig, filename)
+
+    # ------------------------------------------------------------------
+    def distribution_plot(self, filename="distribution.png", max_cols=6):
+        """Distribution plot (histogram + KDE) for the numeric column with
+        the highest absolute skewness, as a focused complement to histogram()."""
+        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
+        if not numeric_cols:
+            return None
+        skews = {c: abs(self.df[c].dropna().skew()) for c in numeric_cols if self.df[c].dropna().shape[0] > 1}
+        if not skews:
+            return None
+        col = max(skews, key=skews.get)
+
+        fig, ax = plt.subplots(figsize=(7, 5))
+        sns.histplot(self.df[col].dropna(), kde=True, ax=ax, color="#8172B2")
+        ax.set_title(f"Distribution of {col} (skewness = {skews[col]:.2f})")
+        fig.tight_layout()
+        return self._save(fig, filename)
+
+    # ------------------------------------------------------------------
+    def qq_plot(self, filename="qqplot.png"):
+        """QQ plot (against a normal distribution) for the most-skewed numeric column."""
+        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
+        if not numeric_cols:
+            return None
+        skews = {c: abs(self.df[c].dropna().skew()) for c in numeric_cols if self.df[c].dropna().shape[0] > 1}
+        if not skews:
+            return None
+        col = max(skews, key=skews.get)
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+        stats.probplot(self.df[col].dropna(), dist="norm", plot=ax)
+        ax.set_title(f"QQ Plot - {col}")
+        fig.tight_layout()
+        return self._save(fig, filename)
+
+    # ------------------------------------------------------------------
+    def missing_value_heatmap(self, filename="missing_heatmap.png"):
+        if self.df.isnull().sum().sum() == 0:
+            return None
+
+        fig, ax = plt.subplots(figsize=(max(6, self.df.shape[1] * 0.6), 5))
+        sns.heatmap(self.df.isnull(), cbar=False, cmap="rocket_r", ax=ax, yticklabels=False)
+        ax.set_title("Missing Value Heatmap")
+        fig.tight_layout()
+        return self._save(fig, filename)
+
+    # ------------------------------------------------------------------
+    def generate_all(self, include_extended=True):
+        """Generate every applicable chart and return list of saved paths.
+        Set include_extended=False to keep the original chart set only."""
         self.histogram()
         self.boxplot()
         self.countplot()
@@ -207,4 +287,10 @@ class ChartGenerator:
         self.barchart()
         self.piechart()
         self.linechart()
+        if include_extended:
+            self.violinplot()
+            self.kdeplot()
+            self.distribution_plot()
+            self.qq_plot()
+            self.missing_value_heatmap()
         return self.generated_files

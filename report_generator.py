@@ -11,9 +11,11 @@ Generates:
 
 import os
 import numpy as np
+import pandas as pd
 
 
-def generate_insights(original_df, cleaned_df, eda_overview, correlation_results, preprocess_log):
+def generate_insights(original_df, cleaned_df, eda_overview, correlation_results, preprocess_log,
+                       quality_report=None, feature_importance_df=None, model_comparison_df=None):
     """Build a list of automatic, human-readable insight strings."""
     insights = []
 
@@ -68,10 +70,39 @@ def generate_insights(original_df, cleaned_df, eda_overview, correlation_results
         )
 
     insights.append("Dataset is clean and suitable for machine learning.")
+
+    if quality_report:
+        insights.append(
+            f"Overall Data Quality Score: {quality_report['quality_score']}/100 "
+            f"({quality_report['quality_grade']})."
+        )
+        if quality_report.get("highly_correlated_pairs"):
+            a, b, val = quality_report["highly_correlated_pairs"][0]
+            insights.append(f"Highly correlated feature pair detected: {a} and {b} (r = {val}).")
+        if quality_report.get("class_distribution") and quality_report["class_distribution"].get("is_imbalanced"):
+            insights.append(
+                f"Target class distribution is imbalanced "
+                f"(ratio ≈ {quality_report['class_distribution']['imbalance_ratio']}:1)."
+            )
+
+    if feature_importance_df is not None and not feature_importance_df.empty:
+        top_feature = feature_importance_df.iloc[0]["feature"]
+        insights.append(f"Most important feature for prediction: {top_feature}.")
+
+    if model_comparison_df is not None and not model_comparison_df.empty:
+        best_row = model_comparison_df.iloc[0]
+        best_model = best_row["model"]
+        score_col = "f1" if "f1" in model_comparison_df.columns else "r2"
+        if score_col in best_row:
+            insights.append(f"Best performing model: {best_model} ({score_col} = {best_row[score_col]}).")
+        else:
+            insights.append(f"Best performing model: {best_model}.")
+
     return insights
 
 
-def generate_recommendations(cleaned_df, correlation_results, eda_overview):
+def generate_recommendations(cleaned_df, correlation_results, eda_overview,
+                              quality_report=None, model_comparison_df=None, task_type=None):
     """Build a list of recommendation strings based on dataset characteristics."""
     recs = []
 
@@ -96,6 +127,27 @@ def generate_recommendations(cleaned_df, correlation_results, eda_overview):
     if cleaned_df.shape[0] < 500:
         recs.append("Dataset is relatively small; consider cross-validation to ensure robust model evaluation.")
 
+    if quality_report:
+        if quality_report.get("high_cardinality_columns"):
+            recs.append(
+                f"Consider frequency or target encoding for high-cardinality columns: "
+                f"{', '.join(quality_report['high_cardinality_columns'])}."
+            )
+        if quality_report.get("highly_correlated_pairs"):
+            recs.append("Consider dropping one feature from each highly correlated pair to reduce redundancy.")
+        if quality_report.get("class_distribution") and quality_report["class_distribution"].get("is_imbalanced"):
+            recs.append("Target is imbalanced; consider class weighting, resampling, or PR-AUC over accuracy.")
+        if quality_report["quality_score"] >= 90:
+            recs.append("Recommended preprocessing: minimal — dataset is already near ML-ready.")
+        elif quality_report["quality_score"] < 60:
+            recs.append("Recommended preprocessing: address missing values and duplicates before modeling.")
+
+    if model_comparison_df is not None and not model_comparison_df.empty:
+        best_model = model_comparison_df.iloc[0]["model"]
+        recs.append(f"Recommended machine learning algorithm based on this run: {best_model}.")
+    elif task_type:
+        recs.append(f"Recommended machine learning approach: {task_type} models.")
+
     return recs
 
 
@@ -113,6 +165,16 @@ def save_insights_file(insights, recommendations, path="output/insights.txt"):
     content = "\n".join(lines)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
+    return path
+
+
+def save_dataframe_csv(df, path):
+    """Save a DataFrame to CSV, creating parent directories as needed.
+    Returns the path, or None if df is empty/None."""
+    if df is None or (hasattr(df, "empty") and df.empty):
+        return None
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    df.to_csv(path, index=False)
     return path
 
 
