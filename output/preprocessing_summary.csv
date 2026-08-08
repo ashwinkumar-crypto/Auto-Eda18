@@ -1,7 +1,0 @@
-Step,Technique,Detail
-Missing Values,median,61 values filled/removed
-Duplicates,drop_duplicates,15 rows removed
-Constant Columns,drop,Country
-Outliers,iqr,5 rows removed (1.0%)
-Encoding,label,"Gender, City"
-Scaling,minmax,"CustomerID, Age, Gender, City, Experience, Salary"
